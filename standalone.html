@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FloodWise — Ultra-Clean Urban Flood Safety AI</title>
+  <title>FloodWise — Urban Flood Safety AI</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -138,27 +138,62 @@
     const PRESETS = [
       { cityId: 'kolkata', text: "How do I get from Salt Lake to Howrah avoiding flooded roads?", label: "Salt Lake ➔ Howrah" },
       { cityId: 'kolkata', text: "Is Park Street to Airport safe for a motorcycle right now?", label: "Park St ➔ Airport" },
-      { cityId: 'mumbai', text: "Navigate from Hindmata to BKC avoiding waterlogged spots", label: "Hindmata ➔ BKC" }
+      { cityId: 'mumbai', text: "Navigate from Hindmata to BKC avoiding waterlogged spots", label: "Hindmata ➔ BKC" },
+      { cityId: 'nyc', text: "Route from Financial District to Williamsburg avoiding storm surge", label: "Lower Manhattan ➔ Brooklyn" }
     ];
 
-    const FLOOD_ZONES = [
-      {
-        id: 'fz-1',
-        name: 'Ultadanga Rail Underpass Basin',
-        severity: 'HIGH',
-        waterDepthCm: 55,
-        description: 'Severe waterlogging under railway bridge due to heavy storm runoff.',
-        coordinates: [[22.5830, 88.3980], [22.5890, 88.4050], [22.5860, 88.4120], [22.5790, 88.4050], [22.5830, 88.3980]]
-      },
-      {
-        id: 'fz-2',
-        name: 'College Street Canal Corridor',
-        severity: 'HIGH',
-        waterDepthCm: 42,
-        description: 'Tram line drainage overflow, impassable for small light cars.',
-        coordinates: [[22.5710, 88.3610], [22.5770, 88.3650], [22.5740, 88.3710], [22.5680, 88.3670], [22.5710, 88.3610]]
-      }
-    ];
+    const FLOOD_ZONES_DATA = {
+      kolkata: [
+        {
+          id: 'fz-1',
+          name: 'Ultadanga Rail Underpass Basin',
+          severity: 'HIGH',
+          waterDepthCm: 55,
+          description: 'Severe waterlogging under railway bridge due to heavy storm runoff.',
+          coordinates: [[22.5830, 88.3980], [22.5890, 88.4050], [22.5860, 88.4120], [22.5790, 88.4050], [22.5830, 88.3980]]
+        },
+        {
+          id: 'fz-2',
+          name: 'College Street Canal Corridor',
+          severity: 'HIGH',
+          waterDepthCm: 42,
+          description: 'Tram line drainage overflow, impassable for small light cars.',
+          coordinates: [[22.5710, 88.3610], [22.5770, 88.3650], [22.5740, 88.3710], [22.5680, 88.3670], [22.5710, 88.3610]]
+        }
+      ],
+      mumbai: [
+        {
+          id: 'fz-m1',
+          name: 'Hindmata Low Underpass',
+          severity: 'HIGH',
+          waterDepthCm: 65,
+          description: 'High tide combined with monsoonal downpour submerging main road.',
+          coordinates: [[19.0080, 72.8420], [19.0140, 72.8470], [19.0110, 72.8540], [19.0040, 72.8480], [19.0080, 72.8420]]
+        }
+      ],
+      nyc: [
+        {
+          id: 'fz-n1',
+          name: 'FDR Drive Lower Surge Zone',
+          severity: 'HIGH',
+          waterDepthCm: 48,
+          description: 'Storm surge flooding northbound arterial lanes.',
+          coordinates: [[40.7050, -74.0020], [40.7120, -73.9980], [40.7100, -73.9910], [40.7020, -73.9950], [40.7050, -74.0020]]
+        }
+      ]
+    };
+
+    const LANDMARKS = {
+      'salt lake': [22.5800, 88.4170],
+      'howrah': [22.5840, 88.3420],
+      'park street': [22.5550, 88.3520],
+      'airport': [22.6540, 88.4460],
+      'hindmata': [19.0080, 72.8450],
+      'bkc': [19.0650, 72.8680],
+      'dadar': [19.0178, 72.8478],
+      'financial district': [40.7075, -74.0090],
+      'williamsburg': [40.7081, -73.9571]
+    };
 
     const VEHICLE_SPECS = {
       car: { name: 'Sedan / Car', clearanceCm: 32, icon: '🚗' },
@@ -187,59 +222,132 @@
       const mapRef = useRef(null);
       const mapInstanceRef = useRef(null);
 
-      const routesData = {
-        originName: 'Salt Lake City',
-        originCoords: [22.5800, 88.4170],
-        destName: 'Howrah Station',
-        destCoords: [22.5840, 88.3420],
-        safeRoute: {
-          id: 'route-safe',
-          name: 'Recommended Safe Detour (via Belgachia Flyover)',
-          distanceKm: 11.2,
-          etaMins: 32,
-          riskScore: 16,
-          maxWaterDepth: '5 cm',
-          stallDanger: false,
-          coordinates: [
-            [22.5800, 88.4170], [22.5930, 88.4100], [22.6010, 88.3880], [22.5960, 88.3600], [22.5880, 88.3480], [22.5840, 88.3420]
-          ]
-        },
-        directRoute: {
-          id: 'route-direct',
-          name: 'Direct Route (via Ultadanga Main Rd)',
-          distanceKm: 9.8,
-          etaMins: 45,
-          riskScore: 78,
-          maxWaterDepth: '55 cm',
-          stallDanger: 55 > VEHICLE_SPECS[selectedMode].clearanceCm,
-          coordinates: [
-            [22.5800, 88.4170], [22.5830, 88.4050], [22.5860, 88.3880], [22.5740, 88.3680], [22.5770, 88.3520], [22.5840, 88.3420]
-          ]
+      // State for computed dynamic routes
+      const [routesData, setRoutesData] = useState(null);
+
+      // Dynamic NLP Route Calculation Function
+      const processQuery = (rawText, currentCity = city, mode = selectedMode, rain = rainLevel) => {
+        const lower = (rawText || '').toLowerCase();
+        let originName = 'Salt Lake City';
+        let destName = 'Howrah Station';
+        let originCoords = [22.5800, 88.4170];
+        let destCoords = [22.5840, 88.3420];
+
+        // Match landmark coordinates
+        Object.keys(LANDMARKS).forEach(lm => {
+          if (lower.includes(lm)) {
+            if (lower.indexOf(lm) < lower.indexOf('to') || !lower.includes('to')) {
+              originName = lm.toUpperCase();
+              originCoords = LANDMARKS[lm];
+            } else {
+              destName = lm.toUpperCase();
+              destCoords = LANDMARKS[lm];
+            }
+          }
+        });
+
+        // Detect City Context
+        let activeCityObj = currentCity;
+        if (lower.includes('mumbai') || lower.includes('hindmata') || lower.includes('bkc')) {
+          activeCityObj = CITIES[1];
+        } else if (lower.includes('nyc') || lower.includes('new york') || lower.includes('williamsburg')) {
+          activeCityObj = CITIES[2];
         }
+
+        if (activeCityObj.id !== city.id) {
+          setCity(activeCityObj);
+        }
+
+        const rainMult = rain === 'light' ? 0.8 : rain === 'moderate' ? 1.1 : rain === 'heavy' ? 1.4 : 1.8;
+        const vehicle = VEHICLE_SPECS[mode];
+
+        // Mid point calculation
+        const midLat = (originCoords[0] + destCoords[0]) / 2;
+        const midLng = (originCoords[1] + destCoords[1]) / 2;
+
+        const directWaypoints = [
+          originCoords,
+          [midLat + 0.003, midLng - 0.003],
+          [midLat - 0.002, midLng + 0.002],
+          destCoords
+        ];
+
+        const safeWaypoints = [
+          originCoords,
+          [originCoords[0] + 0.012, originCoords[1] - 0.005],
+          [destCoords[0] + 0.010, destCoords[1] + 0.008],
+          destCoords
+        ];
+
+        const directRiskScore = Math.min(99, Math.round(78 * rainMult * (vehicle.clearanceCm < 30 ? 1.2 : 1.0)));
+        const safeRiskScore = Math.min(99, Math.round(16 * rainMult));
+        const maxWaterDepthCm = 55;
+
+        const computed = {
+          originName,
+          originCoords,
+          destName,
+          destCoords,
+          safeRoute: {
+            id: 'route-safe',
+            name: `Recommended Safe Detour (via Elevated Bypass)`,
+            distanceKm: 11.2,
+            etaMins: 32,
+            riskScore: safeRiskScore,
+            maxWaterDepth: '5 cm',
+            stallDanger: false,
+            coordinates: safeWaypoints
+          },
+          directRoute: {
+            id: 'route-direct',
+            name: `Direct Route (via Submerged Main Rd)`,
+            distanceKm: 9.8,
+            etaMins: 45,
+            riskScore: directRiskScore,
+            maxWaterDepth: `${maxWaterDepthCm} cm`,
+            stallDanger: maxWaterDepthCm > vehicle.clearanceCm,
+            coordinates: directWaypoints
+          }
+        };
+
+        setRoutesData(computed);
+        setSelectedRouteId('route-safe');
       };
 
+      // Initial execution
+      useEffect(() => {
+        processQuery(queryText, city, selectedMode, rainLevel);
+      }, [city.id, selectedMode, rainLevel]);
+
+      // Voice Search with proper error handling
       const handleVoiceInput = () => {
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
           const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
           const rec = new SpeechRecognition();
           rec.onstart = () => setIsListening(true);
           rec.onresult = (e) => {
-            setQueryText(e.results[0][0].transcript);
+            const transcript = e.results[0][0].transcript;
+            setQueryText(transcript);
             setIsListening(false);
+            processQuery(transcript);
           };
+          rec.onerror = () => setIsListening(false);
           rec.onend = () => setIsListening(false);
           rec.start();
         } else {
           setIsListening(true);
           setTimeout(() => {
-            setQueryText("How do I get from Salt Lake to Howrah avoiding flooded roads?");
+            const sim = "How do I get from Salt Lake to Howrah avoiding flooded roads?";
+            setQueryText(sim);
             setIsListening(false);
+            processQuery(sim);
           }, 1000);
         }
       };
 
+      // Leaflet Map render
       useEffect(() => {
-        if (!mapRef.current) return;
+        if (!mapRef.current || !routesData) return;
         if (mapInstanceRef.current) mapInstanceRef.current.remove();
 
         const map = L.map(mapRef.current, { zoomControl: false }).setView(city.center, city.zoom);
@@ -258,7 +366,9 @@
           }
         });
 
-        FLOOD_ZONES.forEach(zone => {
+        // Render Flood Zones
+        const cityZones = FLOOD_ZONES_DATA[city.id] || FLOOD_ZONES_DATA.kolkata;
+        cityZones.forEach(zone => {
           const isHigh = zone.severity === 'HIGH';
           const p = L.polygon(zone.coordinates, {
             color: isHigh ? '#f43f5e' : '#f59e0b',
@@ -277,12 +387,14 @@
           `);
         });
 
+        // Safe Route Line
         const safePoly = L.polyline(routesData.safeRoute.coordinates, {
           color: selectedRouteId === 'route-safe' ? '#10b981' : '#334155',
           weight: selectedRouteId === 'route-safe' ? 6 : 3,
           opacity: selectedRouteId === 'route-safe' ? 0.95 : 0.4
         }).addTo(map);
 
+        // Direct Route Line
         const directPoly = L.polyline(routesData.directRoute.coordinates, {
           color: selectedRouteId === 'route-direct' ? '#f43f5e' : '#334155',
           weight: selectedRouteId === 'route-direct' ? 6 : 3,
@@ -293,15 +405,17 @@
         safePoly.on('click', () => setSelectedRouteId('route-safe'));
         directPoly.on('click', () => setSelectedRouteId('route-direct'));
 
-        L.circleMarker(routesData.originCoords, { radius: 8, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(map).bindPopup("Start: Salt Lake");
-        L.circleMarker(routesData.destCoords, { radius: 8, color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 1 }).addTo(map).bindPopup("End: Howrah");
+        // Start & End Pin Markers
+        L.circleMarker(routesData.originCoords, { radius: 8, color: '#10b981', fillColor: '#10b981', fillOpacity: 1 }).addTo(map).bindPopup(`Start: ${routesData.originName}`);
+        L.circleMarker(routesData.destCoords, { radius: 8, color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 1 }).addTo(map).bindPopup(`End: ${routesData.destName}`);
 
+        // Crowdsourced Report Pins
         crowdReports.forEach(r => {
           L.circleMarker(r.coords, { radius: 7, color: '#f43f5e', fillColor: '#f43f5e', fillOpacity: 0.9 }).addTo(map).bindPopup(`⚠️ <b>${r.locationName}</b><br/>Depth: ${r.waterDepth}<br/><i>"${r.notes}"</i>`);
         });
 
         return () => map.remove();
-      }, [city, selectedRouteId, crowdReports, clickToReportMode]);
+      }, [city, selectedRouteId, crowdReports, clickToReportMode, routesData]);
 
       return (
         <div className="flex-1 flex flex-col">
@@ -394,6 +508,7 @@
                 type="text"
                 value={queryText}
                 onChange={(e) => setQueryText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && processQuery(queryText)}
                 placeholder="Type travel request in plain English (e.g. How do I get from Salt Lake to Howrah avoiding flooded roads?)..."
                 className="w-full bg-transparent text-xs sm:text-sm text-slate-100 placeholder-slate-400 focus:outline-none font-medium py-1.5"
               />
@@ -408,7 +523,7 @@
               </button>
 
               <button 
-                onClick={() => setSelectedRouteId('route-safe')}
+                onClick={() => processQuery(queryText)}
                 className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 transition transform hover:scale-[1.02]"
               >
                 Route
@@ -422,7 +537,10 @@
                 {PRESETS.map((p, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setQueryText(p.text)}
+                    onClick={() => {
+                      setQueryText(p.text);
+                      processQuery(p.text);
+                    }}
                     className="glass-pill px-2.5 py-0.5 text-slate-300 text-xs font-medium rounded-lg"
                   >
                     {p.label}
@@ -451,7 +569,7 @@
               </div>
             </div>
 
-            {/* 1. COMPACT MAP VIEW (TOP SECTION - COMPACT HEIGHT: 350px) */}
+            {/* 1. COMPACT MAP VIEW (TOP SECTION) */}
             <div className="w-full h-[350px] rounded-2xl overflow-hidden glass-card relative border border-slate-800/80 shadow-xl">
               <div ref={mapRef} className="w-full h-full"></div>
               
@@ -467,109 +585,111 @@
               </div>
             </div>
 
-            {/* 2. ROUTE SAFETY COMPARISON (BOTTOM SECTION - DIRECTLY BELOW COMPACT MAP) */}
-            <div className="w-full space-y-3 pt-1">
-              
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                <div>
-                  <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    🗺️ Route Risk & Safety Analysis
-                  </h2>
-                </div>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono">
-                  Clearance: {VEHICLE_SPECS[selectedMode].clearanceCm}cm
-                </span>
-              </div>
-
-              {/* Grid of Candidate Route Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* 2. ROUTE SAFETY COMPARISON (BOTTOM SECTION) */}
+            {routesData && (
+              <div className="w-full space-y-3 pt-1">
                 
-                {/* Safe Route Card */}
-                <div 
-                  onClick={() => setSelectedRouteId('route-safe')}
-                  className={`p-4 rounded-2xl glass-card cursor-pointer transition relative overflow-hidden ${
-                    selectedRouteId === 'route-safe' 
-                      ? 'border-emerald-500/80 bg-slate-900/90 glow-safe ring-2 ring-emerald-500/20' 
-                      : 'border-slate-800/80 bg-slate-900/40 hover:bg-slate-900/70'
-                  }`}
-                >
-                  <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-500 to-teal-400 text-slate-950 text-[10px] font-extrabold px-3 py-0.5 rounded-bl-xl uppercase tracking-wider shadow">
-                    ★ RECOMMENDED SAFE DETOUR
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <div>
+                    <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                      🗺️ Route Risk & Safety Analysis: <span className="text-cyan-400">{routesData.originName} ➔ {routesData.destName}</span>
+                    </h2>
                   </div>
-
-                  <h3 className="font-bold text-sm text-slate-100 pr-12">{routesData.safeRoute.name}</h3>
-
-                  <div className="flex flex-wrap items-center gap-3 my-2 py-2 px-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
-                    <div>ETA: <strong className="text-slate-100">{routesData.safeRoute.etaMins} mins</strong></div>
-                    <div className="h-3 w-px bg-slate-800"></div>
-                    <div>Distance: <strong className="text-slate-100">{routesData.safeRoute.distanceKm} km</strong></div>
-                    <div className="h-3 w-px bg-slate-800"></div>
-                    <div>Safety Score: <strong className="text-emerald-400">{routesData.safeRoute.riskScore}/100 (LOW)</strong></div>
-                  </div>
-
-                  <div className="text-xs text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
-                    ✅ Completely circumvents high-risk submerged basins via elevated flyover path.
-                  </div>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono">
+                    Clearance: {VEHICLE_SPECS[selectedMode].clearanceCm}cm
+                  </span>
                 </div>
 
-                {/* Direct High Risk Route Card */}
-                <div 
-                  onClick={() => setSelectedRouteId('route-direct')}
-                  className={`p-4 rounded-2xl glass-card cursor-pointer transition relative overflow-hidden ${
-                    selectedRouteId === 'route-direct' 
-                      ? 'border-rose-500/80 bg-slate-900/90 glow-hazard ring-2 ring-rose-500/20' 
-                      : 'border-slate-800/80 bg-slate-900/40 hover:bg-slate-900/70'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-extrabold text-rose-400 uppercase tracking-wider">⚠️ HIGH FLOOD HAZARD</span>
-                    <span className="text-xs font-bold text-rose-400">Risk Score: {routesData.directRoute.riskScore}/100</span>
+                {/* Grid of Candidate Route Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  
+                  {/* Safe Route Card */}
+                  <div 
+                    onClick={() => setSelectedRouteId('route-safe')}
+                    className={`p-4 rounded-2xl glass-card cursor-pointer transition relative overflow-hidden ${
+                      selectedRouteId === 'route-safe' 
+                        ? 'border-emerald-500/80 bg-slate-900/90 glow-safe ring-2 ring-emerald-500/20' 
+                        : 'border-slate-800/80 bg-slate-900/40 hover:bg-slate-900/70'
+                    }`}
+                  >
+                    <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-500 to-teal-400 text-slate-950 text-[10px] font-extrabold px-3 py-0.5 rounded-bl-xl uppercase tracking-wider shadow">
+                      ★ RECOMMENDED SAFE DETOUR
+                    </div>
+
+                    <h3 className="font-bold text-sm text-slate-100 pr-12">{routesData.safeRoute.name}</h3>
+
+                    <div className="flex flex-wrap items-center gap-3 my-2 py-2 px-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
+                      <div>ETA: <strong className="text-slate-100">{routesData.safeRoute.etaMins} mins</strong></div>
+                      <div className="h-3 w-px bg-slate-800"></div>
+                      <div>Distance: <strong className="text-slate-100">{routesData.safeRoute.distanceKm} km</strong></div>
+                      <div className="h-3 w-px bg-slate-800"></div>
+                      <div>Safety Score: <strong className="text-emerald-400">{routesData.safeRoute.riskScore}/100 (LOW)</strong></div>
+                    </div>
+
+                    <div className="text-xs text-emerald-400 flex items-center gap-1.5 bg-emerald-500/10 p-2 rounded-xl border border-emerald-500/20">
+                      ✅ Completely circumvents high-risk submerged basins via elevated flyover path.
+                    </div>
                   </div>
 
-                  <h3 className="font-bold text-sm text-slate-100">{routesData.directRoute.name}</h3>
+                  {/* Direct High Risk Route Card */}
+                  <div 
+                    onClick={() => setSelectedRouteId('route-direct')}
+                    className={`p-4 rounded-2xl glass-card cursor-pointer transition relative overflow-hidden ${
+                      selectedRouteId === 'route-direct' 
+                        ? 'border-rose-500/80 bg-slate-900/90 glow-hazard ring-2 ring-rose-500/20' 
+                        : 'border-slate-800/80 bg-slate-900/40 hover:bg-slate-900/70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-extrabold text-rose-400 uppercase tracking-wider">⚠️ HIGH FLOOD HAZARD</span>
+                      <span className="text-xs font-bold text-rose-400">Risk Score: {routesData.directRoute.riskScore}/100</span>
+                    </div>
 
-                  <div className="flex flex-wrap items-center gap-3 my-2 py-2 px-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
-                    <div>ETA: <strong className="text-slate-100">{routesData.directRoute.etaMins} mins</strong></div>
-                    <div className="h-3 w-px bg-slate-800"></div>
-                    <div>Distance: <strong className="text-slate-100">{routesData.directRoute.distanceKm} km</strong></div>
-                    <div className="h-3 w-px bg-slate-800"></div>
-                    <div>Max Depth: <strong className="text-rose-400">{routesData.directRoute.maxWaterDepth}</strong></div>
-                  </div>
+                    <h3 className="font-bold text-sm text-slate-100">{routesData.directRoute.name}</h3>
 
-                  {routesData.directRoute.stallDanger ? (
-                    <div className="text-xs text-rose-300 space-y-1 bg-rose-500/15 p-2.5 rounded-xl border border-rose-500/30">
-                      <div className="font-extrabold text-rose-400 flex items-center gap-1">
-                        🚨 VEHICLE STALL RISK DETECTED
+                    <div className="flex flex-wrap items-center gap-3 my-2 py-2 px-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs">
+                      <div>ETA: <strong className="text-slate-100">{routesData.directRoute.etaMins} mins</strong></div>
+                      <div className="h-3 w-px bg-slate-800"></div>
+                      <div>Distance: <strong className="text-slate-100">{routesData.directRoute.distanceKm} km</strong></div>
+                      <div className="h-3 w-px bg-slate-800"></div>
+                      <div>Max Depth: <strong className="text-rose-400">{routesData.directRoute.maxWaterDepth}</strong></div>
+                    </div>
+
+                    {routesData.directRoute.stallDanger ? (
+                      <div className="text-xs text-rose-300 space-y-1 bg-rose-500/15 p-2.5 rounded-xl border border-rose-500/30">
+                        <div className="font-extrabold text-rose-400 flex items-center gap-1">
+                          🚨 VEHICLE STALL RISK DETECTED
+                        </div>
+                        <p className="text-[11px] leading-snug">
+                          Water depth ({routesData.directRoute.maxWaterDepth}) exceeds {VEHICLE_SPECS[selectedMode].name} intake height ({VEHICLE_SPECS[selectedMode].clearanceCm}cm). Engine stall likely!
+                        </p>
                       </div>
-                      <p className="text-[11px] leading-snug">
-                        Water depth (55cm) exceeds {VEHICLE_SPECS[selectedMode].name} intake height ({VEHICLE_SPECS[selectedMode].clearanceCm}cm). Engine stall likely!
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-amber-300 bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
-                      ⚠️ Passes through 2 submerged flood zones. Slow traffic.
-                    </div>
-                  )}
+                    ) : (
+                      <div className="text-xs text-amber-300 bg-amber-500/10 p-2 rounded-xl border border-amber-500/20">
+                        ⚠️ Passes through submerged flood zones. Slow traffic.
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* AI Reasoning Note Box */}
+                <div className="p-3.5 rounded-2xl glass-card border-cyan-500/30 bg-slate-900/90 space-y-1.5">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span className="font-bold text-xs text-cyan-300 flex items-center gap-1.5">
+                      ✨ AI Safety Reasoning Note
+                    </span>
+                    <span className="text-[10px] bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 px-2 py-0.5 rounded font-mono">
+                      LLM Guidance Engine
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    The direct path crosses low-lying underpasses where water levels have reached <strong>{routesData.directRoute.maxWaterDepth}</strong> due to heavy monsoon downpour. Re-routing via the elevated bypass saves ~13 minutes by avoiding submerged gridlock.
+                  </p>
                 </div>
 
               </div>
-
-              {/* AI Reasoning Note Box */}
-              <div className="p-3.5 rounded-2xl glass-card border-cyan-500/30 bg-slate-900/90 space-y-1.5">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                  <span className="font-bold text-xs text-cyan-300 flex items-center gap-1.5">
-                    ✨ AI Safety Reasoning Note
-                  </span>
-                  <span className="text-[10px] bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 px-2 py-0.5 rounded font-mono">
-                    LLM Guidance Engine
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  The direct path crosses the <strong>Ultadanga Rail Underpass</strong> where water levels have reached <strong>55 cm</strong> due to heavy monsoon downpour. Re-routing via Belgachia Flyover adds 1.4 km, but saves ~13 minutes by avoiding stranded gridlock.
-                </p>
-              </div>
-
-            </div>
+            )}
 
           </main>
 
@@ -637,14 +757,14 @@
                 </div>
                 <div className="bg-slate-950 p-4 rounded-2xl font-mono text-xs text-slate-200 border border-slate-800 whitespace-pre-wrap leading-relaxed">
                   [FLOODWISE EMERGENCY ROUTE]
-                  From: Salt Lake to Howrah Station
-                  Recommended: Belgachia Flyover (SAFE - Score 16/100)
-                  Avoid: Ultadanga Underpass (55cm Submerged)
+                  From: {routesData?.originName} to {routesData?.destName}
+                  Recommended: {routesData?.safeRoute.name} (SAFE - Score {routesData?.safeRoute.riskScore}/100)
+                  Avoid: {routesData?.directRoute.name} ({routesData?.directRoute.maxWaterDepth} Submerged)
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText("[FLOODWISE ROUTE] Take Belgachia Flyover (SAFE). Avoid Ultadanga Underpass (55cm submerged).");
+                      navigator.clipboard.writeText(`[FLOODWISE ROUTE] From ${routesData?.originName} to ${routesData?.destName}: Take Safe Detour. Avoid flooded direct path.`);
                       alert("Copied SMS text to clipboard!");
                     }}
                     className="px-4 py-2 bg-slate-800 text-cyan-400 font-bold text-xs rounded-xl border border-slate-700 hover:bg-slate-700"
